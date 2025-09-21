@@ -1,0 +1,5 @@
+{
+  "name": "$MPS VIDEO POKER",
+  "description": "A video poker game with a double-or-nothing feature. Play with simulated $MPS credits.",
+  "requestFramePermissions": []
+}
