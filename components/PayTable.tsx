@@ -8,8 +8,8 @@ interface PayTableProps {
 
 const PayTable: React.FC<PayTableProps> = ({ betAmount, handResult }) => {
     return (
-        <div className="w-full h-full bg-brand-panel-bg rounded-2xl p-3 shadow-lg">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:text-base h-full content-between">
+        <div className="w-full pt-1 px-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0 text-xs font-mono">
                 {PAY_TABLE_ORDER.map((handName) => {
                     const payout = PAY_TABLE[handName] || 0;
                     const isWinningHand = handName === handResult && payout > 0;
@@ -21,10 +21,10 @@ const PayTable: React.FC<PayTableProps> = ({ betAmount, handResult }) => {
 
                     return (
                         <React.Fragment key={handName}>
-                            <div className={`text-left font-medium px-2 py-0.5 ${rowClasses}`}>
+                            <div className={`text-left font-medium px-2 leading-tight ${rowClasses}`}>
                                 {handName}
                             </div>
-                            <div className={`text-right font-semibold px-2 py-0.5 ${rowClasses}`}>
+                            <div className={`text-right font-semibold px-2 leading-tight ${rowClasses}`}>
                                 {(payout * betAmount).toLocaleString()}
                             </div>
                         </React.Fragment>

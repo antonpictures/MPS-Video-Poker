@@ -7,16 +7,20 @@ interface GambleViewProps {
     currentWin: number;
     onGambleResult: (isWin: boolean, card: CardType) => void;
     onCashOut: () => void;
+    wonCards: CardType[];
+    demoGuess?: 'red' | 'black' | null;
+    demoRevealedCard?: CardType | null;
 }
 
-const GambleView: React.FC<GambleViewProps> = ({ currentWin, onGambleResult, onCashOut }) => {
+const GambleView: React.FC<GambleViewProps> = ({ currentWin, onGambleResult, onCashOut, wonCards, demoGuess, demoRevealedCard }) => {
     const [revealedCard, setRevealedCard] = useState<CardType | null>(null);
     const [guess, setGuess] = useState<'red' | 'black' | null>(null);
     const [isRevealing, setIsRevealing] = useState(false);
-    const [gambleHistory, setGambleHistory] = useState<CardType[]>([]);
+
+    const isDemoActive = !!demoRevealedCard;
 
     const handleGuess = (color: 'red' | 'black') => {
-        if (isRevealing) return;
+        if (isRevealing || isDemoActive) return;
         setIsRevealing(true);
         setGuess(color);
 
@@ -27,15 +31,15 @@ const GambleView: React.FC<GambleViewProps> = ({ currentWin, onGambleResult, onC
         const isCorrect = (color === 'red' && isRed) || (color === 'black' && !isRed);
 
         setTimeout(() => {
-            if (isCorrect) {
-                setGambleHistory(prev => [...prev, card]);
-            }
             onGambleResult(isCorrect, card);
             setIsRevealing(false);
             setRevealedCard(null);
             setGuess(null);
         }, 1500);
     };
+
+    const cardToShow = demoRevealedCard || revealedCard;
+    const buttonsDisabled = isRevealing || isDemoActive;
 
     return (
         <div className="bg-brand-panel-bg rounded-2xl p-3 shadow-lg flex flex-col justify-around items-center h-full w-full">
@@ -47,7 +51,7 @@ const GambleView: React.FC<GambleViewProps> = ({ currentWin, onGambleResult, onC
 
             <div className="flex flex-col items-center">
                  <div className="flex justify-center items-center h-10 space-x-1 mb-2">
-                    {gambleHistory.map((card, index) => {
+                    {wonCards.map((card, index) => {
                         const isRed = card.suit === '♥' || card.suit === '♦';
                         return (
                             <div 
@@ -61,9 +65,8 @@ const GambleView: React.FC<GambleViewProps> = ({ currentWin, onGambleResult, onC
                     })}
                 </div>
                 <div className="flex justify-center items-center h-36">
-                    {revealedCard ? (
-                        // FIX: Added the required animationDelay prop with a value of 0.
-                        <Card card={revealedCard} isHeld={false} isWinning={false} isDealtPhase={false} onClick={() => {}} animationDelay={0} />
+                    {cardToShow ? (
+                        <Card card={cardToShow} isHeld={false} isWinning={false} isDealtPhase={false} onClick={() => {}} animationDelay={0} />
                     ) : (
                         <div className="w-24 h-36 bg-brand-dark-bg/70 border-2 border-brand-panel-light border-dashed rounded-xl flex justify-center items-center">
                             <span className="text-4xl text-brand-panel-light font-bold">?</span>
@@ -77,19 +80,19 @@ const GambleView: React.FC<GambleViewProps> = ({ currentWin, onGambleResult, onC
                 <div className="flex space-x-2">
                     <button
                         onClick={() => handleGuess('red')}
-                        disabled={isRevealing}
+                        disabled={buttonsDisabled}
                         className={`w-full h-12 text-base font-bold rounded-xl transition-all duration-200 disabled:opacity-50
                             bg-brand-red hover:opacity-90 disabled:bg-brand-red
-                            ${guess === 'red' && isRevealing ? 'ring-4 ring-offset-2 ring-offset-brand-panel-bg ring-white' : ''}`}
+                            ${(guess === 'red' && isRevealing) || demoGuess === 'red' ? 'ring-4 ring-offset-2 ring-offset-brand-panel-bg ring-white' : ''}`}
                     >
                         RED
                     </button>
                     <button
                         onClick={() => handleGuess('black')}
-                        disabled={isRevealing}
+                        disabled={buttonsDisabled}
                         className={`w-full h-12 text-base font-bold rounded-xl transition-all duration-200 disabled:opacity-50
                             bg-black text-white hover:bg-black/80 disabled:bg-black
-                            ${guess === 'black' && isRevealing ? 'ring-4 ring-offset-2 ring-offset-brand-panel-bg ring-white' : ''}`}
+                            ${(guess === 'black' && isRevealing) || demoGuess === 'black' ? 'ring-4 ring-offset-2 ring-offset-brand-panel-bg ring-white' : ''}`}
                     >
                         BLACK
                     </button>
@@ -97,7 +100,7 @@ const GambleView: React.FC<GambleViewProps> = ({ currentWin, onGambleResult, onC
 
                 <button
                     onClick={onCashOut}
-                    disabled={isRevealing}
+                    disabled={buttonsDisabled}
                     className="w-full bg-brand-panel-light text-white font-semibold py-3 px-8 rounded-xl hover:opacity-90 transition-colors duration-200 disabled:opacity-50"
                 >
                     CASH OUT

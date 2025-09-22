@@ -22,4 +22,5 @@ export interface GambleHistoryItem {
     streak: number;
     timestamp: number;
     finalCard?: Card;
+    wonCards?: Card[];
 }

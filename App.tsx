@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GamePhase, Card as CardType, GambleHistoryItem } from './types';
-import { PAY_TABLE, MAX_BET, MIN_BET, STARTING_CREDITS, MAX_GAMBLE_ATTEMPTS, ANTI_GAMBLING_MESSAGES, DEAL_AGAIN_MESSAGES } from './constants';
+import { PAY_TABLE, MAX_BET, MIN_BET, STARTING_CREDITS, MAX_GAMBLE_ATTEMPTS, ANTI_GAMBLING_MESSAGES, DEAL_AGAIN_MESSAGES, STREAK_LOSS_MESSAGES } from './constants';
 import { createDeck, evaluateHand, getWinningCards, autoHoldStrategy } from './services/gameLogic';
 import PayTable from './components/PayTable';
 import Card from './components/Card';
@@ -23,10 +23,24 @@ const App: React.FC = () => {
     const [showOutOfCreditsModal, setShowOutOfCreditsModal] = useState<boolean>(false);
     const [gambleAttempts, setGambleAttempts] = useState<number>(0);
     const [losingMessage, setLosingMessage] = useState<string>('');
+    const [winMessage, setWinMessage] = useState<string>('');
     const [dealAgainText, setDealAgainText] = useState<string>('DEAL AGAIN');
     const [lastWin, setLastWin] = useState<{amount: number; result: string}>({amount: 0, result: ''});
     const [history, setHistory] = useState<GambleHistoryItem[]>([]);
     const [isPanelVisible, setIsPanelVisible] = useState(true);
+    const [gambleWonCards, setGambleWonCards] = useState<CardType[]>([]);
+    const [showMaxGambleWinModal, setShowMaxGambleWinModal] = useState<boolean>(false);
+    const [maxGambleWinAmount, setMaxGambleWinAmount] = useState<number>(0);
+
+    // Demo Mode State
+    const [isDemoRunning, setIsDemoRunning] = useState<boolean>(true);
+    const [demoMessage, setDemoMessage] = useState<string>("DEMO --- HOW TO PLAY");
+    const [demoGambleGuess, setDemoGambleGuess] = useState<'red' | 'black' | null>(null);
+    const [demoRevealedCard, setDemoRevealedCard] = useState<CardType | null>(null);
+    const [isDealButtonFlashing, setIsDealButtonFlashing] = useState<boolean>(false);
+    const demoTimeoutRef = useRef<number | null>(null);
+    const isDemoRunningRef = useRef(isDemoRunning);
+    isDemoRunningRef.current = isDemoRunning;
 
 
     useEffect(() => {
@@ -48,6 +62,13 @@ const App: React.FC = () => {
         }
     }, [history]);
 
+    useEffect(() => {
+        if (credits === 0 && betAmount === 0 && phase === GamePhase.Betting) {
+            const randomMsg = ANTI_GAMBLING_MESSAGES[Math.floor(Math.random() * ANTI_GAMBLING_MESSAGES.length)];
+            setLosingMessage(randomMsg);
+        }
+    }, [credits, betAmount, phase]);
+
     const transitionToPhase = useCallback((nextPhase: GamePhase, callback?: () => void) => {
         setIsPanelVisible(false);
         setTimeout(() => {
@@ -57,20 +78,61 @@ const App: React.FC = () => {
         }, 250);
     }, []);
 
-    const resetHand = useCallback(() => {
-        setHand([]);
+    const resetHand = useCallback((isDemo = false) => {
+        if (!isDemo) {
+            setHand([]); // Only clear the hand if it's NOT a demo reset, to prevent flicker.
+        }
         setHeldCards([false, false, false, false, false]);
         setWinningCards([false, false, false, false, false]);
         setCurrentWin(0);
         setHandResult('');
         setLastWin({amount: 0, result: ''});
         setLosingMessage('');
+        setWinMessage('');
         setGambleAttempts(0);
         setPhase(GamePhase.Betting);
         setDealAgainText('DEAL AGAIN');
+        setGambleWonCards([]);
+        if (!isDemo) {
+            setDemoMessage("");
+            setDemoGambleGuess(null);
+            setDemoRevealedCard(null);
+        }
     }, []);
 
+    const stopDemoMode = useCallback(() => {
+        if (isDemoRunningRef.current) {
+            setIsDemoRunning(false);
+            if (demoTimeoutRef.current) {
+                clearTimeout(demoTimeoutRef.current);
+            }
+            resetHand(false);
+            setIsDealButtonFlashing(true);
+        }
+    }, [resetHand]);
+    
+    useEffect(() => {
+        const handleUserActivity = () => {
+            if (isDemoRunningRef.current) {
+                stopDemoMode();
+            }
+        };
+
+        window.addEventListener('mousemove', handleUserActivity);
+        window.addEventListener('mousedown', handleUserActivity);
+
+        return () => {
+            window.removeEventListener('mousemove', handleUserActivity);
+            window.removeEventListener('mousedown', handleUserActivity);
+        };
+    }, [stopDemoMode]);
+
     const handleDeal = useCallback(() => {
+        stopDemoMode();
+        setIsDealButtonFlashing(false);
+        if (betAmount <= 0) {
+            return;
+        }
         if (credits < betAmount) {
             setShowOutOfCreditsModal(true);
             return;
@@ -85,10 +147,12 @@ const App: React.FC = () => {
         setHandResult('');
         setLastWin({amount: 0, result: ''});
         setLosingMessage('');
+        setWinMessage('');
         setCurrentWin(0);
         setWinningCards([false, false, false, false, false]);
         setHeldCards(autoHoldStrategy(newHand));
-    }, [credits, betAmount]);
+        setGambleWonCards([]);
+    }, [credits, betAmount, stopDemoMode]);
 
     const handleDraw = useCallback(() => {
         let deckIndex = 0;
@@ -119,6 +183,11 @@ const App: React.FC = () => {
     }, [hand, heldCards, deck, betAmount]);
     
     const handleCashOut = useCallback(() => {
+        if (currentWin > 0) {
+            const randomMsg = ANTI_GAMBLING_MESSAGES[Math.floor(Math.random() * ANTI_GAMBLING_MESSAGES.length)];
+            setWinMessage(randomMsg);
+        }
+
         if (phase === GamePhase.Gamble) {
             transitionToPhase(GamePhase.Betting, () => {
                 const newHistoryItem: GambleHistoryItem = {
@@ -127,11 +196,13 @@ const App: React.FC = () => {
                     amount: currentWin,
                     streak: gambleAttempts,
                     timestamp: Date.now(),
+                    wonCards: gambleWonCards,
                 };
                 setHistory(prev => [newHistoryItem, ...prev]);
                 setCredits(prev => prev + currentWin);
                 setCurrentWin(0);
                 setGambleAttempts(0);
+                setGambleWonCards([]);
             });
         } else {
             setCredits(prev => prev + currentWin);
@@ -139,9 +210,10 @@ const App: React.FC = () => {
             setPhase(GamePhase.Betting);
             setGambleAttempts(0);
         }
-    }, [currentWin, phase, gambleAttempts, history, transitionToPhase]);
+    }, [currentWin, phase, gambleAttempts, history, transitionToPhase, gambleWonCards]);
 
     const handleToggleHold = (index: number) => {
+        stopDemoMode();
         if (phase === GamePhase.Dealt) {
             setHeldCards(prev => {
                 const newHeld = [...prev];
@@ -152,6 +224,8 @@ const App: React.FC = () => {
     };
 
     const handleBetChange = (direction: 'up' | 'down' | 'max') => {
+        stopDemoMode();
+        setIsDealButtonFlashing(false);
         if (direction === 'max') {
             setBetAmount(Math.min(MAX_BET, credits));
         } else if (direction === 'up') {
@@ -163,6 +237,7 @@ const App: React.FC = () => {
     
     const handleGambleResult = useCallback((isWin: boolean, card: CardType) => {
         if (isWin) {
+            setGambleWonCards(prev => [...prev, card]);
             const newAttempts = gambleAttempts + 1;
             setGambleAttempts(newAttempts);
             setCurrentWin(prevWin => {
@@ -176,12 +251,15 @@ const App: React.FC = () => {
                                 amount: newWin,
                                 streak: newAttempts,
                                 timestamp: Date.now(),
-                                finalCard: card,
+                                wonCards: [...gambleWonCards, card],
                             };
                             setHistory(prev => [newHistoryItem, ...prev]);
                             setCredits(prevCredits => prevCredits + newWin);
                             setCurrentWin(0);
                             setGambleAttempts(0);
+                            setGambleWonCards([]);
+                            setMaxGambleWinAmount(newWin);
+                            setShowMaxGambleWinModal(true);
                          });
                     }, 1500);
                 }
@@ -189,71 +267,213 @@ const App: React.FC = () => {
             });
         } else {
             transitionToPhase(GamePhase.Drawn, () => {
+                const streakLength = gambleAttempts + 1;
                 const newHistoryItem: GambleHistoryItem = {
                     id: Date.now().toString(),
                     outcome: 'lost',
                     amount: currentWin,
-                    streak: gambleAttempts + 1,
+                    streak: streakLength,
                     timestamp: Date.now(),
+                    wonCards: gambleWonCards,
                     finalCard: card,
                 };
                 setHistory(prev => [newHistoryItem, ...prev]);
                 setCurrentWin(0);
-                const randomMsg = ANTI_GAMBLING_MESSAGES[Math.floor(Math.random() * ANTI_GAMBLING_MESSAGES.length)];
+                
+                const messagePool = STREAK_LOSS_MESSAGES[streakLength] || ANTI_GAMBLING_MESSAGES;
+                const randomMsg = messagePool[Math.floor(Math.random() * messagePool.length)];
                 setLosingMessage(randomMsg);
+
                 const randomBtnText = DEAL_AGAIN_MESSAGES[Math.floor(Math.random() * DEAL_AGAIN_MESSAGES.length)];
                 setDealAgainText(randomBtnText);
+                setGambleWonCards([]);
             });
         }
-    }, [gambleAttempts, currentWin, transitionToPhase]);
+    }, [gambleAttempts, currentWin, transitionToPhase, gambleWonCards]);
 
     const reloadCredits = () => {
         setCredits(STARTING_CREDITS);
+        setBetAmount(250);
         setShowOutOfCreditsModal(false);
         resetHand();
     };
 
     useEffect(() => {
-        if (phase === GamePhase.Drawn && currentWin === 0) {
+        if (phase === GamePhase.Drawn && currentWin === 0 && !isDemoRunning) {
             const timeoutId = setTimeout(() => {
-                if (credits >= betAmount) {
+                if (credits >= betAmount && betAmount > 0) {
                     handleDeal();
                 } else {
                     if (credits === 0) {
                         setShowOutOfCreditsModal(true);
+                    } else if (betAmount > credits) {
+                        setBetAmount(credits); // Auto-adjust bet if credits are low but not zero
                     }
                     resetHand();
                 }
             }, 3000);
             return () => clearTimeout(timeoutId);
         }
-    }, [phase, currentWin, credits, betAmount, handleDeal, resetHand]);
+    }, [phase, currentWin, credits, betAmount, handleDeal, resetHand, isDemoRunning]);
+
+    useEffect(() => {
+        if (!isDemoRunning) return;
+    
+        const runDemoGamble = (currentGambleWin: number, attempt: number, wonCards: CardType[]) => {
+            if (!isDemoRunningRef.current || attempt > 2) { // Limit demo gamble streak to 2
+                setDemoMessage("DEMO --- COLLECTING THE WIN!");
+                demoTimeoutRef.current = window.setTimeout(() => runDemoCycle(true), 2500);
+                return;
+            }
+    
+            transitionToPhase(GamePhase.Gamble);
+            setDemoMessage("DEMO --- DOUBLE OR NOTHING...");
+            
+            demoTimeoutRef.current = window.setTimeout(() => {
+                if (!isDemoRunningRef.current) return;
+                const guess = Math.random() > 0.5 ? 'red' : 'black';
+                setDemoMessage(`DEMO --- GUESSING ${guess.toUpperCase()}!`);
+                setDemoGambleGuess(guess);
+    
+                const card = createDeck()[0];
+                setDemoRevealedCard(card);
+                
+                const isRed = card.suit === '♥' || card.suit === '♦';
+                const isWin = (guess === 'red' && isRed) || (guess === 'black' && !isRed);
+    
+                demoTimeoutRef.current = window.setTimeout(() => {
+                    if (!isDemoRunningRef.current) return;
+                    setDemoGambleGuess(null);
+                    setDemoRevealedCard(null);
+    
+                    if (isWin) {
+                        const newWin = currentGambleWin * 2;
+                        const newWonCards = [...wonCards, card];
+                        setDemoMessage("DEMO --- WIN! LET'S GO AGAIN!");
+                        setCurrentWin(newWin);
+                        setGambleWonCards(newWonCards);
+                        demoTimeoutRef.current = window.setTimeout(() => runDemoGamble(newWin, attempt + 1, newWonCards), 2500);
+                    } else {
+                        setDemoMessage("DEMO --- LOST THE GAMBLE!");
+                        transitionToPhase(GamePhase.Betting, () => {
+                           setCurrentWin(0);
+                           demoTimeoutRef.current = window.setTimeout(() => runDemoCycle(true), 2500);
+                        });
+                    }
+                }, 2500);
+            }, 2500);
+        };
+    
+        const runDemoCycle = (isRestarting = false) => {
+            if (isRestarting) {
+                resetHand(true);
+            }
+    
+            setDemoMessage("DEMO --- DEALING A NEW HAND");
+            const newDeck = createDeck();
+            let currentDeck = [...newDeck];
+            const newHand = currentDeck.splice(0, 5);
+            setHand(newHand);
+            setPhase(GamePhase.Dealt);
+            const holds = autoHoldStrategy(newHand);
+            setHeldCards(holds);
+            
+            demoTimeoutRef.current = window.setTimeout(() => {
+                if (!isDemoRunningRef.current) return;
+                setDemoMessage("DEMO --- HOLDING PROMISING CARDS...");
+    
+                const finalHand = newHand.map((card, i) => holds[i] ? card : currentDeck.shift()!);
+                setHand(finalHand);
+                const result = evaluateHand(finalHand);
+                setHandResult(result);
+                setPhase(GamePhase.Drawn);
+                const payout = PAY_TABLE[result] || 0;
+                const winAmount = payout * betAmount;
+                
+                demoTimeoutRef.current = window.setTimeout(() => {
+                    if (!isDemoRunningRef.current) return;
+    
+                    if (winAmount > 0) {
+                        setCurrentWin(winAmount);
+                        setWinningCards(getWinningCards(finalHand, result));
+                        setLastWin({ amount: winAmount, result });
+                        setDemoMessage(`DEMO --- A ${result.toUpperCase()}!`);
+                        
+                        const shouldGamble = Math.random() > 0.4; // 60% chance to gamble
+                        if (shouldGamble) {
+                            demoTimeoutRef.current = window.setTimeout(() => runDemoGamble(winAmount, 1, []), 3000);
+                        } else {
+                            setDemoMessage("DEMO --- TAKING THE WIN.");
+                            demoTimeoutRef.current = window.setTimeout(() => runDemoCycle(true), 3000);
+                        }
+                    } else {
+                        setLastWin({ amount: 0, result: 'NO WIN' });
+                        setDemoMessage("DEMO --- UNLUCKY. TRYING AGAIN.");
+                        demoTimeoutRef.current = window.setTimeout(() => runDemoCycle(true), 3000);
+                    }
+                }, 2500);
+            }, 2500);
+        };
+    
+        runDemoCycle();
+    
+        return () => {
+            if (demoTimeoutRef.current) clearTimeout(demoTimeoutRef.current);
+        };
+    }, [isDemoRunning, betAmount, transitionToPhase]);
 
 
     return (
-        <div className="min-h-screen text-white flex flex-col items-center p-2 sm:p-4 selection:bg-brand-yellow selection:text-black">
+        <div className="min-h-screen text-white flex flex-col items-center p-1 sm:p-2 selection:bg-brand-yellow selection:text-black">
             <main className="w-full max-w-md mx-auto flex flex-col items-center">
-                <header className="w-full flex justify-between items-center my-2 px-1">
-                    <h1 className="text-xl font-bold text-slate-300 tracking-wider">$MPS</h1>
+                <header className="w-full flex flex-col sm:flex-row justify-between sm:items-center px-1 text-center sm:text-left">
+                    <h1 className="text-lg font-bold text-slate-300 tracking-wider mb-2 sm:mb-0">$MPS Google Maps Video Poker</h1>
                     <GameInfo credits={credits} betAmount={betAmount} currentWin={currentWin} />
                 </header>
 
-                <div className={`w-full min-h-[18rem] my-2 flex items-center justify-center transition-opacity duration-200 ease-in-out ${isPanelVisible ? 'opacity-100' : 'opacity-0'}`}>
-                     {phase === GamePhase.Gamble ? (
-                        <GambleView 
+                <div className="w-full bg-black rounded-2xl shadow-lg">
+                    <div className={`w-full min-h-[18rem] flex items-center justify-center transition-opacity duration-200 ease-in-out ${isPanelVisible ? 'opacity-100' : 'opacity-0'}`}>
+                         {phase === GamePhase.Gamble ? (
+                            <GambleView 
+                                currentWin={currentWin}
+                                onGambleResult={handleGambleResult}
+                                onCashOut={handleCashOut}
+                                wonCards={gambleWonCards}
+                                demoGuess={demoGambleGuess}
+                                demoRevealedCard={demoRevealedCard}
+                            />
+                         ) : (
+                            <PayTable betAmount={betAmount} handResult={handResult} />
+                         )}
+                    </div>
+                    {phase !== GamePhase.Gamble && (
+                        <Controls 
+                            phase={phase}
+                            credits={credits}
+                            betAmount={betAmount}
                             currentWin={currentWin}
-                            onGambleResult={handleGambleResult}
+                            onDeal={handleDeal}
+                            onDraw={handleDraw}
+                            onBetChange={handleBetChange}
                             onCashOut={handleCashOut}
+                            onGamble={() => transitionToPhase(GamePhase.Gamble)}
+                            dealAgainText={dealAgainText}
+                            isDealButtonFlashing={isDealButtonFlashing}
                         />
-                     ) : (
-                        <PayTable betAmount={betAmount} handResult={handResult} />
-                     )}
+                    )}
                 </div>
                 
-                <div className="w-full h-8 flex items-center justify-center">
+                <div className="w-full min-h-[1.75rem] flex items-center justify-center">
                     {lastWin.amount > 0 && phase !== GamePhase.Betting && (
                          <div key={lastWin.result} className="bg-brand-green text-white text-sm font-bold px-4 py-1.5 rounded-full shadow-lg animate-pop-in">
                             {lastWin.result}
+                        </div>
+                    )}
+                    {winMessage && (
+                        <div className="bg-black/50 border border-brand-green/50 px-4 py-2 rounded-xl animate-pop-in">
+                            <p className="text-base text-yellow-300 text-center">
+                                {winMessage}
+                            </p>
                         </div>
                     )}
                     {currentWin === 0 && losingMessage && (
@@ -274,31 +494,20 @@ const App: React.FC = () => {
                                     card={card}
                                     isHeld={heldCards[i]}
                                     isWinning={winningCards[i]}
-                                    isDealtPhase={phase === GamePhase.Dealt}
+                                    isDealtPhase={phase === GamePhase.Dealt && !isDemoRunning}
                                     onClick={() => handleToggleHold(i)}
                                     animationDelay={i * 80}
                                 />
                             ))}
                         </div>
                     ) : (
-                        <div className="text-center">
-                            <p className="text-2xl font-medium text-slate-500">RISK YOUR $MPS</p>
+                         <div className="text-center px-4">
+                            <p className="text-2xl font-bold text-slate-400 tracking-wide animate-pulse">
+                                {isDemoRunning ? demoMessage : 'Powered by Google Maps $MPS on Solana'}
+                            </p>
                         </div>
                     )}
                 </div>
-                
-                <Controls 
-                    phase={phase}
-                    credits={credits}
-                    betAmount={betAmount}
-                    currentWin={currentWin}
-                    onDeal={handleDeal}
-                    onDraw={handleDraw}
-                    onBetChange={handleBetChange}
-                    onCashOut={handleCashOut}
-                    onGamble={() => transitionToPhase(GamePhase.Gamble)}
-                    dealAgainText={dealAgainText}
-                />
                 
                 <HistoryLog history={history} />
             </main>
@@ -316,6 +525,25 @@ const App: React.FC = () => {
                         className="w-full bg-brand-yellow text-brand-dark-bg font-bold py-3 px-6 rounded-xl hover:opacity-90 transition-opacity duration-200"
                     >
                         Restart Simulation
+                    </button>
+                </div>
+            </Modal>
+            
+            <Modal
+                isOpen={showMaxGambleWinModal}
+                onClose={() => setShowMaxGambleWinModal(false)}
+                title="MAX STREAK!"
+            >
+                <div className="text-center">
+                    <p className="text-3xl text-brand-yellow font-bold mb-4">
+                        You won {maxGambleWinAmount.toLocaleString()} $MPS!
+                    </p>
+                    <p className="text-lg text-slate-300 mb-6">You degenerate gambler. ;)</p>
+                    <button 
+                        onClick={() => setShowMaxGambleWinModal(false)}
+                        className="w-full bg-brand-yellow text-brand-dark-bg font-bold py-3 px-6 rounded-xl hover:opacity-90 transition-opacity duration-200"
+                    >
+                        Awesome
                     </button>
                 </div>
             </Modal>

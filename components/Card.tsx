@@ -5,7 +5,7 @@ interface CardProps {
     card: CardType;
     isHeld: boolean;
     isWinning: boolean;
-    isDealtPhase: boolean;
+isDealtPhase: boolean;
     onClick: () => void;
     animationDelay: number;
 }

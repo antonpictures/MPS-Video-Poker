@@ -13,14 +13,15 @@ interface ControlsProps {
     onCashOut: () => void;
     onGamble: () => void;
     dealAgainText: string;
+    isDealButtonFlashing?: boolean;
 }
 
 const ActionButton: React.FC<React.PropsWithChildren<{ onClick: () => void; disabled?: boolean; variant?: 'primary' | 'secondary'; className?: string }>> = ({ onClick, disabled, variant = 'secondary', children, className }) => {
-    const baseClasses = "font-semibold py-3 px-6 rounded-xl transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-brand-yellow/30 w-full";
+    const baseClasses = "font-semibold py-3 px-6 rounded-xl transition-all duration-200 focus:outline-none focus:ring-4 w-full";
     
     const variantClasses = {
-        primary: "bg-brand-yellow text-brand-dark-bg hover:opacity-90",
-        secondary: "bg-brand-panel-bg text-white hover:bg-brand-panel-light"
+        primary: "bg-brand-blue text-white hover:opacity-90 focus:ring-brand-blue/50",
+        secondary: "bg-brand-panel-bg text-white hover:bg-brand-panel-light focus:ring-brand-yellow/30"
     };
     
     const disabledClasses = "disabled:bg-brand-panel-bg/50 disabled:cursor-not-allowed disabled:text-slate-500";
@@ -36,13 +37,13 @@ const ActionButton: React.FC<React.PropsWithChildren<{ onClick: () => void; disa
     );
 };
 
-const Controls: React.FC<ControlsProps> = ({ phase, credits, betAmount, currentWin, onDeal, onDraw, onBetChange, onCashOut, onGamble, dealAgainText }) => {
+const Controls: React.FC<ControlsProps> = ({ phase, credits, betAmount, currentWin, onDeal, onDraw, onBetChange, onCashOut, onGamble, dealAgainText, isDealButtonFlashing }) => {
     const maxPossibleBet = Math.min(MAX_BET, credits);
 
     const renderActionButtons = () => {
         switch (phase) {
             case GamePhase.Betting:
-                return <ActionButton variant="primary" onClick={onDeal} disabled={credits < betAmount}>DEAL</ActionButton>;
+                return <ActionButton variant="primary" onClick={onDeal} disabled={credits < betAmount || betAmount <= 0} className={isDealButtonFlashing ? 'animate-flash-deal' : ''}>DEAL</ActionButton>;
             
             case GamePhase.Dealt:
                 return <ActionButton variant="primary" onClick={onDraw}>DRAW</ActionButton>;
@@ -56,7 +57,7 @@ const Controls: React.FC<ControlsProps> = ({ phase, credits, betAmount, currentW
                         </div>
                     );
                 }
-                return <ActionButton variant="primary" onClick={onDeal} disabled={credits < betAmount}>{dealAgainText}</ActionButton>;
+                return <ActionButton variant="primary" onClick={onDeal} disabled={credits < betAmount || betAmount <= 0}>{dealAgainText}</ActionButton>;
             
             default:
                 return null;
@@ -64,7 +65,7 @@ const Controls: React.FC<ControlsProps> = ({ phase, credits, betAmount, currentW
     };
 
     return (
-        <div className="w-full grid grid-cols-2 gap-2 sm:gap-3 h-20 items-center px-2">
+        <div className="w-full grid grid-cols-2 gap-2 sm:gap-3 pt-1 pb-2 items-center px-2">
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <ActionButton onClick={() => onBetChange('down')} disabled={betAmount <= MIN_BET}>-</ActionButton>
                 <ActionButton onClick={() => onBetChange('up')} disabled={betAmount >= maxPossibleBet}>+</ActionButton>
