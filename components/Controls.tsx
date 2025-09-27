@@ -39,6 +39,7 @@ const ActionButton: React.FC<React.PropsWithChildren<{ onClick: () => void; disa
 
 const Controls: React.FC<ControlsProps> = ({ phase, credits, betAmount, currentWin, onDeal, onDraw, onBetChange, onCashOut, onGamble, dealAgainText, isDealButtonFlashing }) => {
     const maxPossibleBet = Math.min(MAX_BET, credits);
+    const areBetControlsDisabled = phase === GamePhase.Dealt;
 
     const renderActionButtons = () => {
         switch (phase) {
@@ -67,9 +68,9 @@ const Controls: React.FC<ControlsProps> = ({ phase, credits, betAmount, currentW
     return (
         <div className="w-full grid grid-cols-2 gap-2 sm:gap-3 pt-1 pb-2 items-center px-2">
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <ActionButton onClick={() => onBetChange('down')} disabled={betAmount <= MIN_BET}>-</ActionButton>
-                <ActionButton onClick={() => onBetChange('up')} disabled={betAmount >= maxPossibleBet}>+</ActionButton>
-                <ActionButton onClick={() => onBetChange('max')} disabled={betAmount === maxPossibleBet}>
+                <ActionButton onClick={() => onBetChange('down')} disabled={betAmount <= MIN_BET || areBetControlsDisabled}>-</ActionButton>
+                <ActionButton onClick={() => onBetChange('up')} disabled={betAmount >= maxPossibleBet || areBetControlsDisabled}>+</ActionButton>
+                <ActionButton onClick={() => onBetChange('max')} disabled={betAmount === maxPossibleBet || areBetControlsDisabled}>
                     <span className="relative right-1">MAX</span>
                 </ActionButton>
             </div>
