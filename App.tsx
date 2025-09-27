@@ -464,26 +464,25 @@ const App: React.FC = () => {
                 </div>
                 
                 <div className="w-full min-h-[1.75rem] flex items-center justify-center">
-                    {lastWin.amount > 0 && phase !== GamePhase.Betting && (
+                    {lastWin.amount > 0 && phase !== GamePhase.Betting ? (
                          <div key={lastWin.result} className="bg-brand-green text-white text-sm font-bold px-4 py-1.5 rounded-full shadow-lg animate-pop-in">
                             {lastWin.result}
                         </div>
-                    )}
-                    {winMessage && (
+                    ) : winMessage ? (
                         <div className="bg-black/50 border border-brand-green/50 px-4 py-2 rounded-xl animate-pop-in">
                             <p className="text-base text-yellow-300 text-center">
                                 {winMessage}
                             </p>
                         </div>
-                    )}
-                    {currentWin === 0 && losingMessage && (
+                    ) : currentWin === 0 && losingMessage ? (
                         <div className="bg-black/50 border border-brand-red/50 px-4 py-2 rounded-xl animate-pop-in">
                             <p className="text-base text-yellow-300 text-center">
                                 {losingMessage}
                             </p>
                         </div>
-                    )}
+                    ) : null}
                 </div>
+
 
                 <div className="w-full min-h-[13rem] flex items-center justify-center">
                     {hand.length === 5 ? (
